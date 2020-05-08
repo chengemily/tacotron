@@ -42,11 +42,14 @@ def time_string():
   return datetime.now().strftime('%Y-%m-%d %H:%M')
 
 
-def train(log_dir, args):
+def train(log_dir, args, trans_ckpt_dir = None):
   commit = get_git_commit() if args.git else 'None'
   checkpoint_path = os.path.join(log_dir, 'model.ckpt')
+  if trans_ckpt_dir != None:
+    trans_checkpoint_path = os.path.join(trans_ckpt_dir, 'model.ckpt')
+
   input_path = os.path.join(args.base_dir, args.input)
-  log('Checkpoint path: %s' % checkpoint_path)
+  log('Checkpoint path: %s' % trans_checkpoint_path)
   log('Loading training data from: %s' % input_path)
   log('Using model: %s' % args.model)
   log(hparams_debug_string())
@@ -79,7 +82,7 @@ def train(log_dir, args):
 
       if args.restore_step:
         # Restore from a checkpoint if the user requested it.
-        restore_path = '%s-%d' % (checkpoint_path, args.restore_step)
+        restore_path = '%s-%d' % (trans_checkpoint_path, args.restore_step)
         saver.restore(sess, restore_path)
         log('Resuming from checkpoint: %s at commit: %s' % (restore_path, commit), slack=True)
       else:
@@ -130,6 +133,8 @@ def main():
   parser.add_argument('--name', help='Name of the run. Used for logging. Defaults to model name.')
   parser.add_argument('--hparams', default='',
     help='Hyperparameter overrides as a comma-separated list of name=value pairs')
+  parser.add_argument('--transfer_dir', default='', help='Directory from which to get checkpoint from transfer')
+  parser.add_argument('--transfer_run', default='', help='Name of the run from which to get checkpoint')
   parser.add_argument('--restore_step', type=int, help='Global step to restore from checkpoint.')
   parser.add_argument('--summary_interval', type=int, default=100,
     help='Steps between running summary ops.')
@@ -139,13 +144,16 @@ def main():
   parser.add_argument('--tf_log_level', type=int, default=1, help='Tensorflow C++ log level.')
   parser.add_argument('--git', action='store_true', help='If set, verify that the client is clean.')
   args = parser.parse_args()
+
   os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(args.tf_log_level)
   run_name = args.name or args.model
   log_dir = os.path.join(args.base_dir, 'logs-%s' % run_name)
+  if len(args.transfer_dir):
+    ckpt_dir = os.path.join(args.transfer_dir, 'logs-%s' % args.transfer_run)
   os.makedirs(log_dir, exist_ok=True)
   infolog.init(os.path.join(log_dir, 'train.log'), run_name, args.slack_url)
   hparams.parse(args.hparams)
-  train(log_dir, args)
+  train(log_dir, args, trans_ckpt_dir = ckpt_dir)
 
 
 if __name__ == '__main__':
